@@ -39,7 +39,9 @@ jobs:
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/
           
           mkdir -p $THEOS/toolchain
-          gh release download v2.5 --repo theos/toolchain --pattern "linux-toolchain.tar.xz" --dir /tmp --clobber
+          # استخدام gh لتحميل أحدث إصدار تلقائياً
+          gh release download --repo theos/toolchain --pattern "linux-toolchain.tar.xz" --dir /tmp --clobber
+          
           tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
           
           echo "$THEOS/bin" >> $GITHUB_PATH
