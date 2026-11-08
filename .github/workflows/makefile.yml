@@ -36,17 +36,28 @@ jobs:
           ls "$THEOS/toolchain" "$THEOS/sdks"
           echo "$THEOS/bin" >> "$GITHUB_PATH"
 
-      - name: Build LiteHook
+      - name: Vendor LiteHook sources
         run: |
-          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
+          # litehook ships no root Makefile — it's meant to be compiled
+          # directly as part of the consuming project, not built as a
+          # standalone static library. So we just copy its sources in.
           git clone --depth 1 https://github.com/opa334/litehook /tmp/litehook
-          cd /tmp/litehook
-          make FINALPACKAGE=1
 
-          mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/lib"
           mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/include"
-          cp include/*.h "$GITHUB_WORKSPACE/vendor/litehook/include/" 2>/dev/null || find . -name "litehook.h" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/include/" \;
-          find . -name "*.a" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/lib/" \;
+          mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/src"
+
+          find /tmp/litehook -name "*.h" -not -path "*/Tests/*" \
+            -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/include/" \;
+
+          find /tmp/litehook/src -name "*.c" \
+            -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/src/" \;
+          find /tmp/litehook/src -name "*.m" \
+            -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/src/" \; 2>/dev/null || true
+
+          echo "== headers =="
+          ls -la "$GITHUB_WORKSPACE/vendor/litehook/include"
+          echo "== sources =="
+          ls -la "$GITHUB_WORKSPACE/vendor/litehook/src"
 
       - name: Build Tweak
         run: |
