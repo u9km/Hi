@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+env:
+  THEOS: ${{ github.workspace }}/theos
+
 jobs:
   build:
     name: Build on Ubuntu
@@ -18,29 +21,34 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
+          sudo apt-get install -y make git curl wget xz-utils clang libssl-dev libplist-dev libxml2-dev zip
           
-          # تحميل ldid وتثبيته
-          curl -LO https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
+          # Download ldid for Linux
+          wget -q https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
           sudo mv ldid_linux_x86_64 /usr/local/bin/ldid
           sudo chmod +x /usr/local/bin/ldid
 
-      - name: Install Theos
+      - name: Install Theos & Toolchain
         run: |
-          export THEOS=${{ github.workspace }}/theos
-          git clone --recursive https://github.com/theos/theos.git $THEOS
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          
+          # Clone SDKs
           git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
           mkdir -p $THEOS/sdks
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/
           
-          # Install Linux Toolchain for Theos
+          # Download Linux Toolchain (v2.5 is stable)
           mkdir -p $THEOS/toolchain
-          curl -LO https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
+          wget -q https://github.com/theos/toolchain/releases/download/v2.5/linux-toolchain.tar.xz
           tar -xf linux-toolchain.tar.xz -C $THEOS/toolchain
+          rm linux-toolchain.tar.xz
+          
+          # Add to PATH for subsequent steps
+          echo "$THEOS/bin" >> $GITHUB_PATH
+          echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
 
       - name: Build LiteHook
         run: |
-          export THEOS=${{ github.workspace }}/theos
           export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
           git clone --depth 1 https://github.com/opa334/litehook /tmp/litehook
           cd /tmp/litehook
@@ -53,13 +61,11 @@ jobs:
 
       - name: Build Tweak
         run: |
-          export THEOS=${{ github.workspace }}/theos
           export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
           make clean || true
           make FINALPACKAGE=1
 
       - name: Locate and Sign dylib
-        id: locate
         run: |
           DYLIB=$(find .theos/obj -name "anogskiller.dylib" | head -1)
           if [ -z "$DYLIB" ]; then 
@@ -69,7 +75,6 @@ jobs:
           ldid -Sentitlements.plist "$DYLIB"
           mkdir -p out
           cp "$DYLIB" out/anogskiller.dylib
-          echo "dylib_path=$DYLIB" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
