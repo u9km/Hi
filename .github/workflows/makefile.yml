@@ -10,8 +10,8 @@ env:
 
 jobs:
   build:
-    name: Build on Ubuntu 22.04
-    runs-on: ubuntu-22.04   # تم التغيير لحل مشكلة libtinfo5
+    name: Build on Ubuntu
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -21,38 +21,20 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
-          
-          # تحميل ldid
-          curl -fL -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
-          sudo mv /tmp/ldid /usr/local/bin/ldid
-          sudo chmod +x /usr/local/bin/ldid
+          sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip xz-utils
 
-      - name: Install Theos & Toolchain
+      - name: Install ldid
         run: |
-          # 1. حذف أي مجلد سابق
-          rm -rf $THEOS
-          
-          # 2. استنساخ Theos
-          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
-          
-          # 3. إنشاء المجلدات
-          mkdir -p $THEOS/sdks
-          mkdir -p $THEOS/toolchain
-          
-          # 4. استنساخ الـ SDKs
-          git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
-          cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/ || true
-          
-          # 5. تحميل الـ Toolchain من الرابط الرسمي باستخدام -fL لمنع تحميل صفحات الـ 404
-          curl -fL -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
-          
-          # 6. فك الضغط
-          tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
-          
-          # 7. إضافة المسارات
-          echo "$THEOS/bin" >> $GITHUB_PATH
-          echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
+          /home/linuxbrew/.linuxbrew/bin/brew install ldid-procursus
+          sudo ln -sf /home/linuxbrew/.linuxbrew/bin/ldid /usr/local/bin/ldid
+          command -v ldid
+
+      - name: Install Theos
+        run: |
+          rm -rf "$THEOS"
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          ls "$THEOS/toolchain" "$THEOS/sdks"
+          echo "$THEOS/bin" >> "$GITHUB_PATH"
 
       - name: Build LiteHook
         run: |
@@ -60,7 +42,7 @@ jobs:
           git clone --depth 1 https://github.com/opa334/litehook /tmp/litehook
           cd /tmp/litehook
           make FINALPACKAGE=1
-          
+
           mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/lib"
           mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/include"
           cp include/*.h "$GITHUB_WORKSPACE/vendor/litehook/include/" 2>/dev/null || find . -name "litehook.h" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/include/" \;
@@ -75,7 +57,7 @@ jobs:
       - name: Locate and Sign dylib
         run: |
           DYLIB=$(find .theos/obj -name "anogskiller.dylib" | head -1)
-          if [ -z "$DYLIB" ]; then 
+          if [ -z "$DYLIB" ]; then
             echo "No dylib found!"
             exit 1
           fi
