@@ -22,30 +22,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
-          
-          # تحميل ldid
           curl -L -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
           sudo mv /tmp/ldid /usr/local/bin/ldid
           sudo chmod +x /usr/local/bin/ldid
 
+      # استخدام إجراء جاهز لتثبيت Theos والأدوات تلقائياً
       - name: Install Theos & Toolchain
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
-          
-          git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
-          mkdir -p $THEOS/sdks
-          cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/
-          
-          mkdir -p $THEOS/toolchain
-          # استخدام gh لتحميل أحدث إصدار تلقائياً
-          gh release download --repo theos/toolchain --pattern "linux-toolchain.tar.xz" --dir /tmp --clobber
-          
-          tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
-          
-          echo "$THEOS/bin" >> $GITHUB_PATH
-          echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-dir: 'theos'
+          theos-src: 'https://github.com/theos/theos'
+          theos-sdks: 'https://github.com/theos/sdks'
 
       - name: Build LiteHook
         run: |
