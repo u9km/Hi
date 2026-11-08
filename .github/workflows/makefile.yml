@@ -10,8 +10,8 @@ env:
 
 jobs:
   build:
-    name: Build on Ubuntu
-    runs-on: ubuntu-latest
+    name: Build on Ubuntu 22.04
+    runs-on: ubuntu-22.04   # تم التغيير لحل مشكلة libtinfo5
     timeout-minutes: 30
 
     steps:
@@ -30,13 +30,13 @@ jobs:
 
       - name: Install Theos & Toolchain
         run: |
-          # 1. حذف أي مجلد سابق لضمان بيئة نظيفة
+          # 1. حذف أي مجلد سابق
           rm -rf $THEOS
           
-          # 2. استنساخ Theos أولاً
+          # 2. استنساخ Theos
           git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
           
-          # 3. إنشاء مجلدات الـ SDKs والـ Toolchain بعد الاستنساخ
+          # 3. إنشاء المجلدات
           mkdir -p $THEOS/sdks
           mkdir -p $THEOS/toolchain
           
@@ -44,11 +44,13 @@ jobs:
           git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/ || true
           
-          # 5. تحميل الـ Linux Toolchain برابط مباشر ومضمون (الإصدار الأخير)
+          # 5. تحميل الـ Toolchain من الرابط الرسمي باستخدام -fL لمنع تحميل صفحات الـ 404
           curl -fL -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
+          
+          # 6. فك الضغط
           tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
           
-          # 6. إضافة المسارات للنظام
+          # 7. إضافة المسارات
           echo "$THEOS/bin" >> $GITHUB_PATH
           echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
 
