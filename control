@@ -1,0 +1,9 @@
+Package: com.nullroutee.anogskiller
+Name: anogs Killer
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Non-JB anogs suppressor — kills anti-cheat reporting via name-based symbol resolution
+Maintainer: NullRoutee
+Author: NullRoutee
+Section: Tweaks
+Priority: optional
