@@ -1,159 +1,71 @@
-name: Build anogskiller
+name: Build anogskiller (Ubuntu)
 
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
-
-env:
-  THEOS: ${{ github.workspace }}/theos
-  THEOS_MAKE_PATH: ${{ github.workspace }}/theos/makefiles
 
 jobs:
   build:
-    name: Build anogskiller.dylib
-    runs-on: macos-13
+    name: Build on Ubuntu
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Show runner info
+      - name: Install Dependencies
         run: |
-          echo "macOS: $(sw_vers -productVersion)"
-          echo "Arch: $(uname -m)"
-          echo "Xcode: $(xcodebuild -version | head -1)"
-          xcrun --sdk iphoneos --show-sdk-version
-
-      - name: Install ldid
-        run: |
-          if ! command -v ldid &>/dev/null; then
-            brew install ldid
-          fi
-          ldid -v 2>&1 || true
+          sudo apt-get update
+          sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev ldid
 
       - name: Install Theos
         run: |
-          git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
-          echo "$THEOS/bin" >> $GITHUB_PATH
-
-      - name: Install Theos SDKs
-        run: |
-          mkdir -p "$THEOS/sdks"
-          git clone --depth 1 https://github.com/theos/sdks /tmp/theos-sdks
-          cp -r /tmp/theos-sdks/iPhoneOS*.sdk "$THEOS/sdks/"
-          ls "$THEOS/sdks/"
-
-      - name: Verify Theos install
-        run: |
-          echo "THEOS=$THEOS"
-          ls "$THEOS/makefiles/" | head
-          echo 'int main(){return 0;}' > /tmp/t.c
-          xcrun -sdk iphoneos clang /tmp/t.c -o /tmp/t -arch arm64 && echo "clang OK"
+          export THEOS=${{ github.workspace }}/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
+          mkdir -p $THEOS/sdks
+          cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/
+          
+          # Install Linux Toolchain for Theos
+          mkdir -p $THEOS/toolchain
+          curl -LO https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
+          tar -xf linux-toolchain.tar.xz -C $THEOS/toolchain
 
       - name: Build LiteHook
         run: |
+          export THEOS=${{ github.workspace }}/theos
+          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
           git clone --depth 1 https://github.com/opa334/litehook /tmp/litehook
           cd /tmp/litehook
-          make FINALPACKAGE=1 2>&1 | tail -20
-
+          make FINALPACKAGE=1
+          
           mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/lib"
           mkdir -p "$GITHUB_WORKSPACE/vendor/litehook/include"
-
-          cp include/*.h "$GITHUB_WORKSPACE/vendor/litehook/include/" 2>/dev/null || \
-            find . -name "litehook.h" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/include/" \;
-
+          cp include/*.h "$GITHUB_WORKSPACE/vendor/litehook/include/" 2>/dev/null || find . -name "litehook.h" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/include/" \;
           find . -name "*.a" -exec cp {} "$GITHUB_WORKSPACE/vendor/litehook/lib/" \;
 
-          echo "== headers =="; ls -la "$GITHUB_WORKSPACE/vendor/litehook/include/"
-          echo "== libs ==";    ls -la "$GITHUB_WORKSPACE/vendor/litehook/lib/"
-
-      - name: Sanity check vendor files
+      - name: Build Tweak
         run: |
-          test -f vendor/litehook/include/litehook.h || { echo "missing litehook.h"; exit 1; }
-          test -f vendor/litehook/lib/liblitehook.a || { echo "missing liblitehook.a"; exit 1; }
+          export THEOS=${{ github.workspace }}/theos
+          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
+          make clean || true
+          make FINALPACKAGE=1
 
-      - name: Build tweak
-        run: |
-          export THEOS=${{ env.THEOS }}
-          export PATH="$THEOS/bin:$PATH"
-          make clean 2>&1 || true
-          make FINALPACKAGE=1 2>&1 | tail -50
-
-      - name: Locate dylib
+      - name: Locate and Sign dylib
         id: locate
         run: |
           DYLIB=$(find .theos/obj -name "anogskiller.dylib" | head -1)
-          if [ -z "$DYLIB" ]; then
-            echo "no dylib produced — dumping tree"
-            find .theos -type f | head -30
-            exit 1
-          fi
-          echo "dylib_path=$DYLIB" >> $GITHUB_OUTPUT
-          echo "found: $DYLIB"
-          file "$DYLIB"
-          lipo -info "$DYLIB"
-
-      - name: Sign dylib
-        run: |
-          DYLIB="${{ steps.locate.outputs.dylib_path }}"
+          if [ -z "$DYLIB" ]; then exit 1; fi
           ldid -Sentitlements.plist "$DYLIB"
-          echo "signed OK"
-          otool -l "$DYLIB" | grep -A2 LC_CODE_SIGNATURE | head -3 || true
-
-      - name: Package artifact
-        run: |
-          DYLIB="${{ steps.locate.outputs.dylib_path }}"
           mkdir -p out
           cp "$DYLIB" out/anogskiller.dylib
-          cd out
-          zip -9 anogskiller-dylib.zip anogskiller.dylib
-          shasum -a 256 anogskiller-dylib.zip > anogskiller-dylib.zip.sha256
-          ls -la
+          echo "dylib_path=$DYLIB" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: anogskiller-dylib-${{ github.sha }}
-          path: |
-            out/anogskiller.dylib
-            out/anogskiller-dylib.zip
-            out/anogskiller-dylib.zip.sha256
+          name: anogskiller-dylib
+          path: out/anogskiller.dylib
           if-no-files-found: error
-          retention-days: 30
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            out/anogskiller.dylib
-            out/anogskiller-dylib.zip
-            out/anogskiller-dylib.zip.sha256
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build summary
-        if: always()
-        run: |
-          echo "## Build summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Runner | \`$(uname -m)\` / macOS $(sw_vers -productVersion) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          if [ -f out/anogskiller.dylib ]; then
-            SIZE=$(stat -f%z out/anogskiller.dylib)
-            ARCHS=$(lipo -info out/anogskiller.dylib | sed 's/.*: //')
-            echo "| Dylib size | $((SIZE/1024)) KB |" >> $GITHUB_STEP_SUMMARY
-            echo "| Architectures | \`$ARCHS\` |" >> $GITHUB_STEP_SUMMARY
-          fi
