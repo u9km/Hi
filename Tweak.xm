@@ -17,9 +17,6 @@
 // ============================================================
 // CONFIG
 // ============================================================
-// 0 = SURGICAL : block ObjC reporting paths only.
-// 1 = FULL     : resolve every known function by name + hook it.
-//                replicate anogs's own clean-value returns ourselves.
 #define FULL_DISABLE_ANOGS 1
 
 // ============================================================
@@ -39,7 +36,6 @@ static void find_anogs_image(void) {
     }
 }
 
-// open the already-loaded anogs handle (RTLD_NOLOAD = don't re-load)
 static void *anogs_handle(void) {
     static void *h = NULL;
     if (h) return h;
@@ -49,9 +45,53 @@ static void *anogs_handle(void) {
 }
 
 // ============================================================
-// EXPORT-TRIE SCANNER — fallback when dlsym misses
+// EXPORT-TRIE SCANNER (Flattened for Clang)
 // ============================================================
-// walks LC_DYLD_EXPORTS_TRIE / LC_DYLD_INFO .export_off
+typedef struct {
+    const uint8_t *base;
+    const uint8_t *end;
+    const char *needle;
+    uintptr_t found;
+} export_ctx_t;
+
+static void scan_walk(export_ctx_t *ctx, const uint8_t *node, const char *prefix, size_t plen) {
+    if (ctx->found || node >= ctx->end) return;
+    const uint8_t *cursor = node;
+    uint64_t term_size = 0;
+    int s = 0; uint8_t b;
+    
+    do { b = *cursor++; term_size |= (uint64_t)(b & 0x7f) << s; s += 7; } while (b & 0x80);
+    
+    if (term_size) {
+        uint64_t flags = 0, off = 0;
+        s = 0; do { b = *cursor++; flags |= (uint64_t)(b & 0x7f) << s; s += 7; } while (b & 0x80);
+        s = 0; do { b = *cursor++; off |= (uint64_t)(b & 0x7f) << s; s += 7; } while (b & 0x80);
+        
+        if (strstr(prefix, ctx->needle)) {
+            ctx->found = (uintptr_t)ctx->base + off;
+            return;
+        }
+    }
+    uint8_t nchild = *cursor++;
+    for (uint8_t i = 0; i < nchild && !ctx->found; i++) {
+        const uint8_t *label_start = cursor;
+        while (*cursor) cursor++;
+        cursor++;
+        uint64_t child_off = 0;
+        s = 0; do { b = *cursor++; child_off |= (uint64_t)(b & 0x7f) << s; s += 7; } while (b & 0x80);
+        
+        char newpfx[512];
+        size_t ll = (cursor - label_start) - 1;
+        if (plen + ll < sizeof(newpfx)) {
+            memcpy(newpfx, prefix, plen);
+            memcpy(newpfx + plen, label_start, ll);
+            size_t nl = plen + ll;
+            newpfx[nl] = 0;
+            scan_walk(ctx, node + child_off, newpfx, nl);
+        }
+    }
+}
+
 static uintptr_t scan_exports_for(const char *needle) {
     if (!g_anogs_hdr) return 0;
     const uint8_t *base = (const uint8_t *)g_anogs_hdr;
@@ -61,86 +101,40 @@ static uintptr_t scan_exports_for(const char *needle) {
     for (uint32_t i = 0; i < g_anogs_hdr->ncmds; i++) {
         const struct load_command *cmd = (const struct load_command *)lc;
         if (cmd->cmd == LC_DYLD_EXPORTS_TRIE) {
-            const struct linkedit_data_command *d = (const void *)cmd;
+            const struct linkedit_data_command *d = (const struct linkedit_data_command *)cmd;
             export_off = d->dataoff; export_sz = d->datasize;
         } else if (cmd->cmd == LC_DYLD_INFO || cmd->cmd == LC_DYLD_INFO_ONLY) {
-            const struct dyld_info_command *d = (const void *)cmd;
+            const struct dyld_info_command *d = (const struct dyld_info_command *)cmd;
             if (d->export_size) { export_off = d->export_off; export_sz = d->export_size; }
         }
         lc += cmd->cmdsize;
     }
     if (!export_off || !export_sz) return 0;
 
-    // ULEB128 reader
-    #define ULEB(p, v) do { v = 0; int s = 0; uint8_t b; do { b = *p++; v |= (b & 0x7f) << s; s += 7; } while (b & 0x80); } while(0)
+    export_ctx_t ctx;
+    ctx.base = base;
+    ctx.end = base + export_off + export_sz;
+    ctx.needle = needle;
+    ctx.found = 0;
 
-    const uint8_t *p = base + export_off, *end = p + export_sz;
-    uintptr_t found = 0;
-    // recursive trie walk
-    void walk(const uint8_t *node, const char *prefix, size_t plen) {
-        if (found || node >= end) return;
-        const uint8_t *cursor = node;
-        uint64_t term_size = 0; ULEB(cursor, term_size);
-        if (term_size) {
-            uint64_t flags = 0, off = 0; ULEB(cursor, flags); ULEB(cursor, off);
-            if (!(flags & 0x08) && strstr(prefix, needle) == prefix + (plen > strlen(needle) ? plen - strlen(needle) : 0)) {
-                found = (uintptr_t)base + off;
-                return;
-            }
-            if (strstr(prefix, needle)) { found = (uintptr_t)base + off; return; }
-        }
-        uint8_t nchild = *cursor++;
-        for (uint8_t i = 0; i < nchild && !found; i++) {
-            const uint8_t *label_start = cursor;
-            while (*cursor) cursor++; // null-terminated
-            cursor++;
-            uint64_t child_off = 0; ULEB(cursor, child_off);
-            char *newpfx = alloca(plen + (cursor - label_start) + 1);
-            memcpy(newpfx, prefix, plen);
-            memcpy(newpfx + plen, label_start, (cursor - label_start) - 1);
-            size_t newlen = plen + (cursor - label_start) - 1;
-            newpfx[newlen] = 0;
-            if (strstr(newpfx, needle)) { walk(node + child_off, newpfx, newlen); }
-            else if (needle[0] && strncmp(newpfx, needle, newlen) == 0) { walk(node + child_off, newpfx, newlen); }
-            else if (strncmp(needle, newpfx, newlen) == 0) { walk(node + child_off, newpfx, newlen); }
-            else if (strlen(needle) >= newlen && memcmp(needle, newpfx, newlen) == 0) { walk(node + child_off, newpfx, newlen); }
-        }
-    }
-    walk(p, "", 0);
-    #undef ULEB
-    return found;
+    scan_walk(&ctx, base + export_off, "", 0);
+    return ctx.found;
 }
 
 // ============================================================
-// MULTI-STRATEGY SYMBOL RESOLVER
+// SYMBOL RESOLVER
 // ============================================================
-// tries: mangled dlsym → bare dlsym → export-trie scan
-// pass one or more candidate names, returns first hit
 static uintptr_t resolve_sym(const char *mangled, const char *bare) {
     void *h = anogs_handle();
-    if (h && mangled) {
-        void *p = dlsym(h, mangled);
-        if (p) return (uintptr_t)p;
-    }
-    if (h && bare) {
-        void *p = dlsym(h, bare);
-        if (p) return (uintptr_t)p;
-    }
-    if (g_anogs_hdr) {
-        if (mangled) {
-            uintptr_t p = scan_exports_for(mangled);
-            if (p) return p;
-        }
-        if (bare) {
-            uintptr_t p = scan_exports_for(bare);
-            if (p) return p;
-        }
-    }
+    if (h && mangled) { void *p = dlsym(h, mangled); if (p) return (uintptr_t)p; }
+    if (h && bare)    { void *p = dlsym(h, bare);    if (p) return (uintptr_t)p; }
+    if (mangled) { uintptr_t p = scan_exports_for(mangled); if (p) return p; }
+    if (bare)    { uintptr_t p = scan_exports_for(bare);    if (p) return p; }
     return 0;
 }
 
 // ============================================================
-// OBJC HOOKS — pure runtime
+// OBJC HOOKS
 // ============================================================
 static NSUUID *hk_identifierForVendor(id self, SEL _cmd) {
     static NSUUID *uuid = nil;
@@ -173,19 +167,13 @@ static void wait_for_class(const char *name, int ms) {
 // C REPLACEMENTS (FULL mode)
 // ============================================================
 #if FULL_DISABLE_ANOGS
-
-// ---- integrity / verification — return clean ----
 static int hk_SFileVerifyPiece(void *f, uint32_t p)              { return 1; }
 static int hk_IFSVerifyFile(void *f)                              { return 1; }
 static int hk_IFSReadPieceVerified(void *f, uint32_t p, void *b)  { return 1; }
 static int hk_SFileReadPieceVerified(void *f, uint32_t p, void *b, uint32_t *o) { return 1; }
 static int hk_verify_file_md5(const char *a, const char *b)       { return 0; }
-static int hk_IFSGetFileSize(void *f, uint64_t *out) {
-    if (out) *out = 0;
-    return 1;
-}
+static int hk_IFSGetFileSize(void *f, uint64_t *out) { if (out) *out = 0; return 1; }
 
-// ---- MD5 fakes — match anogs's own logic for patch/pak ----
 static int hk_CheckFileMd5(const char *path, char *out) {
     if (!path || !out) return -1;
     if (strstr(path, "patch") || strstr(path, "game_patch") || strstr(path, ".pak")) {
@@ -202,7 +190,6 @@ static int hk_GetFileBufferMd5(const void *buf, size_t len, char *out) {
     return 0;
 }
 
-// ---- crypto / cert — all succeed ----
 static int hk_RSA_verify(int t, const uint8_t *s, uint32_t sl, const uint8_t *m, uint32_t ml, void *r) { return 1; }
 static int hk_RSA_sign(int t, const uint8_t *m, uint32_t ml, uint8_t *s, uint32_t *sl, void *r) { return 1; }
 static int hk_EVP_PKEY_verify(void *p, const uint8_t *s, size_t sl, const uint8_t *m, size_t ml) { return 1; }
@@ -214,10 +201,6 @@ static int hk_SSL_CTX_use_PrivateKey_file(void *c, const char *f, int t) { retur
 static int hk_SSL_CTX_check_private_key(void *c)                  { return 1; }
 static int hk_SSL_CTX_load_verify_locations(void *c, const char *ca, const char *cap) { return 1; }
 
-// ---- file I/O passthrough (open, read, close) ----
-// game still needs to read real files; we only kill the *verify* path.
-// leave SFileOpenFile / SFileReadPieceVerified etc. — SURGICAL-friendly
-// for FULL mode keep them returning true so anogs doesn't short-circuit reads.
 static int hk_SFileOpenArchive(const char *n, uint32_t p, uint32_t f, void **h) { return 1; }
 static int hk_SFileOpenFile(void *arc, const char *n, void **h)  { return 1; }
 static int hk_IFSOpenArchive(const char *n, void **h)            { return 1; }
@@ -225,7 +208,6 @@ static int hk_IFSOpenFile(void *ifs, const char *n, void **h)    { return 1; }
 static int hk_SFileCloseFile(void *h)                            { return 1; }
 static int hk_SFileCloseArchive(void *h)                         { return 1; }
 
-// ---- detection — report clean ----
 static int hk_is_jb(void)              { return 0; }
 static int hk_ROOTED(void)             { return 0; }
 static int hk_DEBUGGER_ATTACHED(void)  { return 0; }
@@ -241,7 +223,6 @@ static int hk_vm_write(mach_port_name_t t, mach_vm_address_t a, uint32_t d, mach
 static int hk_vm_protect(mach_port_name_t t, mach_vm_address_t a, mach_vm_size_t s, int mx, int pr) { return 5; }
 static int hk_mach_vm_protect(mach_port_name_t t, mach_vm_address_t a, mach_vm_size_t s, int mx, int pr) { return 5; }
 
-// ---- sysctl / sysctlbyname — clear debug flags ----
 static int hk_sysctl(int *n, uint32_t l, void *o, size_t *ol, void *nw, size_t nl) { return -1; }
 static int hk_sysctlbyname(const char *n, void *o, size_t *ol, void *nw, size_t nl) {
     if (n && (strstr(n, "debug") || strstr(n, "kern.proc"))) {
@@ -250,33 +231,25 @@ static int hk_sysctlbyname(const char *n, void *o, size_t *ol, void *nw, size_t 
     }
     return -1;
 }
-
-// ---- dlopen / dlsym passthrough ----
 static void *hk_dlopen(const char *n, int f)  { return NULL; }
 static void *hk_dlsym(void *h, const char *n) { return NULL; }
-
 #endif
 
 // ============================================================
-// SYMBOL TABLE — mangled name + bare name for each target
+// SYMBOL TABLE
 // ============================================================
 #if FULL_DISABLE_ANOGS
 typedef struct { const char *mangled; const char *bare; void *replacement; void *orig; } hook_entry;
 
 static hook_entry g_hooks[] = {
-    // ---- integrity ----
     { "__ZL19my_SFileVerifyPieceP3$_0j",                  "SFileVerifyPiece",           (void*)hk_SFileVerifyPiece,           NULL },
     { "__ZL16my_IFSVerifyFileP3$_0",                      "IFSVerifyFile",              (void*)hk_IFSVerifyFile,              NULL },
     { "__ZL23my_IFSReadPieceVerifiedP3$_0jPv",            "IFSReadPieceVerified",       (void*)hk_IFSReadPieceVerified,       NULL },
     { "__ZL25my_SFileReadPieceVerifiedP3$_0jPvPj",        "SFileReadPieceVerified",     (void*)hk_SFileReadPieceVerified,     NULL },
     { "__ZL18my_verify_file_md5PKcS0_",                   "verify_file_md5",            (void*)hk_verify_file_md5,            NULL },
     { "__ZL17my_IFSGetFileSizeP3$_0Py",                   "IFSGetFileSize",             (void*)hk_IFSGetFileSize,             NULL },
-
-    // ---- md5 ----
     { "__ZL15my_CheckFileMd5PKcPc",                       "CheckFileMd5",               (void*)hk_CheckFileMd5,               NULL },
     { "__ZL19my_GetFileBufferMd5PKvmPc",                  "GetFileBufferMd5",           (void*)hk_GetFileBufferMd5,           NULL },
-
-    // ---- crypto ----
     { "__ZL13my_RSA_verifyiPKhjS0_jPv",                   "RSA_verify",                 (void*)hk_RSA_verify,                 NULL },
     { "__ZL11my_RSA_signiPKhjPhPjPv",                     "RSA_sign",                   (void*)hk_RSA_sign,                   NULL },
     { "__ZL18my_EVP_PKEY_verifyPvPKhmS1_m",               "EVP_PKEY_verify",            (void*)hk_EVP_PKEY_verify,            NULL },
@@ -287,16 +260,12 @@ static hook_entry g_hooks[] = {
     { "__ZL30my_SSL_CTX_use_PrivateKey_filePvPKci",       "SSL_CTX_use_PrivateKey_file",(void*)hk_SSL_CTX_use_PrivateKey_file,NULL },
     { "__ZL28my_SSL_CTX_check_private_keyPv",             "SSL_CTX_check_private_key",  (void*)hk_SSL_CTX_check_private_key,  NULL },
     { "__ZL32my_SSL_CTX_load_verify_locationsPvPKcS1_",   "SSL_CTX_load_verify_locations",(void*)hk_SSL_CTX_load_verify_locations, NULL },
-
-    // ---- file io ----
     { "__ZL19my_SFileOpenArchivePKcjjPP3$_0",             "SFileOpenArchive",           (void*)hk_SFileOpenArchive,           NULL },
     { "__ZL16my_SFileOpenFileP3$_0PKcPS0_",               "SFileOpenFile",              (void*)hk_SFileOpenFile,              NULL },
     { "__ZL17my_IFSOpenArchivePKcPP3$_0",                 "IFSOpenArchive",             (void*)hk_IFSOpenArchive,             NULL },
     { "__ZL14my_IFSOpenFileP3$_0PKcPS0_",                 "IFSOpenFile",                (void*)hk_IFSOpenFile,                NULL },
     { "__ZL17my_SFileCloseFileP3$_0",                     "SFileCloseFile",             (void*)hk_SFileCloseFile,             NULL },
     { "__ZL20my_SFileCloseArchiveP3$_0",                  "SFileCloseArchive",          (void*)hk_SFileCloseArchive,          NULL },
-
-    // ---- detection ----
     { "__ZL8my_is_jbv",                                   "is_jb",                      (void*)hk_is_jb,                      NULL },
     { "__ZL9my_ROOTEDv",                                  "ROOTED",                     (void*)hk_ROOTED,                     NULL },
     { "__ZL20my_DEBUGGER_ATTACHEDv",                      "DEBUGGER_ATTACHED",          (void*)hk_DEBUGGER_ATTACHED,          NULL },
@@ -331,12 +300,9 @@ static void install_objc_hooks(void) {
     hook_method("GSDK", "isJailbroken", (void *)hk_GSDK_isJailbroken);
     hook_method("GSDK", "reportEvent:params:", (void *)hk_GSDK_reportEvent);
     hook_method("GSDK", "checkSignature", (void *)hk_GSDK_checkSignature);
-    hook_method("GSDKInitManager", "checkEnvironmentIntegrity",
-                (void *)hk_GSDKInitManager_checkEnvironmentIntegrity);
-    hook_method("GSDKHttpDnsResolver", "verifyResponse:",
-                (void *)hk_GSDKHttpDnsResolver_verifyResponse);
-    hook_method("TSSAntiCheatManager", "reportCheatData:",
-                (void *)hk_TSSAntiCheatManager_reportCheatData);
+    hook_method("GSDKInitManager", "checkEnvironmentIntegrity", (void *)hk_GSDKInitManager_checkEnvironmentIntegrity);
+    hook_method("GSDKHttpDnsResolver", "verifyResponse:", (void *)hk_GSDKHttpDnsResolver_verifyResponse);
+    hook_method("TSSAntiCheatManager", "reportCheatData:", (void *)hk_TSSAntiCheatManager_reportCheatData);
 }
 
 #if FULL_DISABLE_ANOGS
@@ -346,13 +312,16 @@ static int install_c_hooks(void) {
         hook_entry *e = &g_hooks[i];
         uintptr_t addr = resolve_sym(e->mangled, e->bare);
         if (!addr) { misses++; continue; }
+        
         void *orig = NULL;
-        int rc = litehook_hook((void *)addr, e->replacement, &orig);
+        // التصحيح: استخدام اسم الدالة الصحيح
+        int rc = litehook_hook_function((void *)addr, e->replacement, &orig);
+        
         e->orig = orig;
         if (rc == 0) hits++;
         else misses++;
     }
-    return hits * 1000 + misses; // pack for logging
+    return hits * 1000 + misses;
 }
 #endif
 
@@ -364,7 +333,6 @@ static void anogs_killer_init(void) {
     @autoreleasepool {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC),
                        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            // wait for anogs to appear in dyld image list
             for (int i = 0; i < 200 && !g_anogs_hdr; i++) {
                 find_anogs_image();
                 if (!g_anogs_hdr) usleep(50000);
@@ -374,12 +342,9 @@ static void anogs_killer_init(void) {
 
 #if FULL_DISABLE_ANOGS
             int packed = install_c_hooks();
-            int hits   = packed / 1000;
-            int misses = packed % 1000;
-            NSLog(@"[anogs-killer] c-hooks: %d hits, %d misses (anogs=%p)",
-                  hits, misses, g_anogs_hdr);
+            NSLog(@"[anogs-killer] c-hooks: %d hits, %d misses", packed / 1000, packed % 1000);
 #endif
-            NSLog(@"[anogs-killer] armed, mode=%d", FULL_DISABLE_ANOGS);
+            NSLog(@"[anogs-killer] armed");
         });
     }
 }
