@@ -12,7 +12,11 @@
 #import <mach-o/nlist.h>
 #import <string.h>
 #import <unistd.h>
-#import "litehook.h"
+
+// إصلاح مشكلة الـ Linker (Name Mangling)
+extern "C" {
+    #import "litehook.h"
+}
 
 // ============================================================
 // CONFIG
@@ -313,7 +317,6 @@ static int install_c_hooks(void) {
         uintptr_t addr = resolve_sym(e->mangled, e->bare);
         if (!addr) { misses++; continue; }
         
-        // التصحيح: LiteHook الجديد يتطلب وسيطين فقط (المصدر والهدف)
         int rc = litehook_hook_function((void *)addr, e->replacement);
         
         if (rc == 0) hits++;
