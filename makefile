@@ -10,14 +10,20 @@ include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME := anogskiller
 
-anogskiller_FILES       := Tweak.xm
+# Tweak.xm + litehook's own sources, compiled directly into this dylib
+# (litehook ships no build system of its own — its .c/.m files are meant
+#  to be compiled as part of the consuming project).
+anogskiller_FILES       := Tweak.xm \
+                           $(wildcard $(THEOS_PROJECT_DIR)/vendor/litehook/src/*.c) \
+                           $(wildcard $(THEOS_PROJECT_DIR)/vendor/litehook/src/*.m)
+
 anogskiller_CFLAGS      := -fobjc-arc \
                            -fvisibility=hidden \
                            -I$(THEOS_PROJECT_DIR)/vendor/litehook/include
-anogskiller_LDFLAGS     := -L$(THEOS_PROJECT_DIR)/vendor/litehook/lib \
-                           -llitehook \
-                           -Wl,-undefined,dynamic_lookup \
+
+anogskiller_LDFLAGS     := -Wl,-undefined,dynamic_lookup \
                            -Wl,-dead_strip
+
 anogskiller_FRAMEWORKS  := Foundation UIKit
 
 # no install to any prefix — dylib only
