@@ -17,25 +17,7 @@ extern "C" {
 }
 
 // ============================================================
-// §1 Anti-Injection (Hide our Dylib using LiteHook)
-// ============================================================
-static uint32_t (*orig_dyld_image_count)(void) = NULL;
-static const char* (*orig_dyld_get_image_name)(uint32_t) = NULL;
-
-static uint32_t hk_dyld_image_count(void) {
-    if (!orig_dyld_image_count) return 0;
-    uint32_t c = orig_dyld_image_count();
-    return (c > 0) ? c - 1 : 0; // نخفي آخر ملف (ملفنا)
-}
-
-static const char* hk_dyld_get_image_name(uint32_t index) {
-    if (!orig_dyld_get_image_name) return NULL;
-    if (index >= hk_dyld_image_count()) return "/usr/lib/libSystem.B.dylib"; 
-    return orig_dyld_get_image_name(index);
-}
-
-// ============================================================
-// §2 Safe C Detection Hooks (LiteHook)
+// §1 Safe C Detection Hooks (LiteHook)
 // ============================================================
 static int hk_is_jb(void) { return 0; }
 static int hk_ROOTED(void) { return 0; }
@@ -50,7 +32,7 @@ static int hk_sysctl(int *n, uint32_t l, void *o, size_t *ol, void *nw, size_t n
 static int hk_sysctlbyname(const char *n, void *o, size_t *ol, void *nw, size_t nl) { return -1; }
 
 // ============================================================
-// §3 ObjC Handlers (From ShadowBypass)
+// §2 ObjC Handlers (From ShadowBypass)
 // ============================================================
 #define DEF_NO(cls, name)  static BOOL hk_##cls##_##name(id _s, SEL _c) { return NO; }
 #define DEF_YES(cls, name) static BOOL hk_##cls##_##name(id _s, SEL _c) { return YES; }
@@ -168,9 +150,8 @@ DEF_ID_P0(Rotate, flipHorizontal)
 DEF_V2(AceMsgBoxImp, ShowMessageBoxWithTitle_Message_LeftBtn_RightBtn)
 DEF_V1(AceMsgBoxImp, dismiss) DEF_V1(AceMsgBoxImp, show)
 
-
 // ============================================================
-// §4 Installers
+// §3 Installers
 // ============================================================
 static void hook_method(const char *cls, const char *sel, void *fn) {
     Class c = objc_getClass(cls);
@@ -267,7 +248,7 @@ static void install_objc_hooks(void) {
 }
 
 // ============================================================
-// §5 Init
+// §4 Init
 // ============================================================
 __attribute__((constructor))
 static void sbxk_init(void) {
@@ -275,14 +256,10 @@ static void sbxk_init(void) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC),
                        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             
-            // 1. إخفاء الملف باستخدام LiteHook
-            litehook_hook_function(dlsym(RTLD_DEFAULT, "_dyld_image_count"), (void*)hk_dyld_image_count, (void**)&orig_dyld_image_count);
-            litehook_hook_function(dlsym(RTLD_DEFAULT, "_dyld_get_image_name"), (void*)hk_dyld_get_image_name, (void**)&orig_dyld_get_image_name);
-
-            // 2. ربط دوال ObjC الخاصة بـ ShadowBypass (آمنة 100%)
+            // 1. ربط دوال ObjC الخاصة بـ ShadowBypass (آمنة 100%)
             install_objc_hooks();
 
-            // 3. ربط دوال C الخاصة بالكشف (آمنة لأنها ترجع int فقط)
+            // 2. ربط دوال C الخاصة بالكشف (آمنة لأنها ترجع int فقط)
             void *h = dlopen("@rpath/anogs.framework/anogs", RTLD_NOLOAD | RTLD_NOW);
             if (h) {
                 struct { const char *name; void *repl; } c_hooks[] = {
@@ -295,7 +272,8 @@ static void sbxk_init(void) {
                 };
                 for (int i = 0; i < sizeof(c_hooks)/sizeof(c_hooks[0]); i++) {
                     void *addr = dlsym(h, c_hooks[i].name);
-                    if (addr) litehook_hook_function(addr, c_hooks[i].repl, NULL);
+                    // التصحيح: تمرير وسيطين فقط (المصدر والهدف)
+                    if (addr) litehook_hook_function(addr, c_hooks[i].repl);
                 }
             }
 
