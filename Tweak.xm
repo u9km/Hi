@@ -239,51 +239,51 @@ static void *hk_dlsym(void *h, const char *n) { return NULL; }
 // SYMBOL TABLE
 // ============================================================
 #if FULL_DISABLE_ANOGS
-typedef struct { const char *mangled; const char *bare; void *replacement; void *orig; } hook_entry;
+typedef struct { const char *mangled; const char *bare; void *replacement; } hook_entry;
 
 static hook_entry g_hooks[] = {
-    { "__ZL19my_SFileVerifyPieceP3$_0j",                  "SFileVerifyPiece",           (void*)hk_SFileVerifyPiece,           NULL },
-    { "__ZL16my_IFSVerifyFileP3$_0",                      "IFSVerifyFile",              (void*)hk_IFSVerifyFile,              NULL },
-    { "__ZL23my_IFSReadPieceVerifiedP3$_0jPv",            "IFSReadPieceVerified",       (void*)hk_IFSReadPieceVerified,       NULL },
-    { "__ZL25my_SFileReadPieceVerifiedP3$_0jPvPj",        "SFileReadPieceVerified",     (void*)hk_SFileReadPieceVerified,     NULL },
-    { "__ZL18my_verify_file_md5PKcS0_",                   "verify_file_md5",            (void*)hk_verify_file_md5,            NULL },
-    { "__ZL17my_IFSGetFileSizeP3$_0Py",                   "IFSGetFileSize",             (void*)hk_IFSGetFileSize,             NULL },
-    { "__ZL15my_CheckFileMd5PKcPc",                       "CheckFileMd5",               (void*)hk_CheckFileMd5,               NULL },
-    { "__ZL19my_GetFileBufferMd5PKvmPc",                  "GetFileBufferMd5",           (void*)hk_GetFileBufferMd5,           NULL },
-    { "__ZL13my_RSA_verifyiPKhjS0_jPv",                   "RSA_verify",                 (void*)hk_RSA_verify,                 NULL },
-    { "__ZL11my_RSA_signiPKhjPhPjPv",                     "RSA_sign",                   (void*)hk_RSA_sign,                   NULL },
-    { "__ZL18my_EVP_PKEY_verifyPvPKhmS1_m",               "EVP_PKEY_verify",            (void*)hk_EVP_PKEY_verify,            NULL },
-    { "__ZL23my_EVP_PKEY_verify_initPv",                  "EVP_PKEY_verify_init",       (void*)hk_EVP_PKEY_verify_init,       NULL },
-    { "__ZL19my_X509_verify_certPv",                      "X509_verify_cert",           (void*)hk_X509_verify_cert,           NULL },
-    { "__ZL25my_X509_check_private_keyPvS_",              "X509_check_private_key",     (void*)hk_X509_check_private_key,     NULL },
-    { "__ZL26my_PEM_read_bio_PrivateKeyPvPS_S_S_",        "PEM_read_bio_PrivateKey",    (void*)hk_PEM_read_bio_PrivateKey,    NULL },
-    { "__ZL30my_SSL_CTX_use_PrivateKey_filePvPKci",       "SSL_CTX_use_PrivateKey_file",(void*)hk_SSL_CTX_use_PrivateKey_file,NULL },
-    { "__ZL28my_SSL_CTX_check_private_keyPv",             "SSL_CTX_check_private_key",  (void*)hk_SSL_CTX_check_private_key,  NULL },
-    { "__ZL32my_SSL_CTX_load_verify_locationsPvPKcS1_",   "SSL_CTX_load_verify_locations",(void*)hk_SSL_CTX_load_verify_locations, NULL },
-    { "__ZL19my_SFileOpenArchivePKcjjPP3$_0",             "SFileOpenArchive",           (void*)hk_SFileOpenArchive,           NULL },
-    { "__ZL16my_SFileOpenFileP3$_0PKcPS0_",               "SFileOpenFile",              (void*)hk_SFileOpenFile,              NULL },
-    { "__ZL17my_IFSOpenArchivePKcPP3$_0",                 "IFSOpenArchive",             (void*)hk_IFSOpenArchive,             NULL },
-    { "__ZL14my_IFSOpenFileP3$_0PKcPS0_",                 "IFSOpenFile",                (void*)hk_IFSOpenFile,                NULL },
-    { "__ZL17my_SFileCloseFileP3$_0",                     "SFileCloseFile",             (void*)hk_SFileCloseFile,             NULL },
-    { "__ZL20my_SFileCloseArchiveP3$_0",                  "SFileCloseArchive",          (void*)hk_SFileCloseArchive,          NULL },
-    { "__ZL8my_is_jbv",                                   "is_jb",                      (void*)hk_is_jb,                      NULL },
-    { "__ZL9my_ROOTEDv",                                  "ROOTED",                     (void*)hk_ROOTED,                     NULL },
-    { "__ZL20my_DEBUGGER_ATTACHEDv",                      "DEBUGGER_ATTACHED",          (void*)hk_DEBUGGER_ATTACHED,          NULL },
-    { "__ZL21my_isDebuggerAttachedv",                     "isDebuggerAttached",         (void*)hk_isDebuggerAttached,         NULL },
-    { "__ZL17my_checkJailbreakv",                         "checkJailbreak",             (void*)hk_checkJailbreak,             NULL },
-    { "__ZL11my_hasCydiav",                               "hasCydia",                   (void*)hk_hasCydia,                   NULL },
-    { "__ZL17my_isJailbroken_cv",                         "isJailbroken",               (void*)hk_isJailbroken,               NULL },
-    { "__ZL19my_amIBeingDebuggedv",                       "amIBeingDebugged",           (void*)hk_amIBeingDebugged,           NULL },
-    { "__ZL9my_ptraceiiPci",                              "ptrace",                     (void*)hk_ptrace,                     NULL },
-    { "__ZL15my_task_for_pidjiPj",                        "task_for_pid",               (void*)hk_task_for_pid,               NULL },
-    { "__ZL20my_vm_read_overwritejmmmPm",                 "vm_read_overwrite",          (void*)hk_vm_read_overwrite,          NULL },
-    { "__ZL11my_vm_writejmmj",                            "vm_write",                   (void*)hk_vm_write,                   NULL },
-    { "__ZL13my_vm_protectjmmii",                         "vm_protect",                 (void*)hk_vm_protect,                 NULL },
-    { "__ZL18my_mach_vm_protectjyyii",                    "mach_vm_protect",            (void*)hk_mach_vm_protect,            NULL },
-    { "__ZL9my_sysctlPijPvPmS0_m",                        "sysctl",                     (void*)hk_sysctl,                     NULL },
-    { "__ZL15my_sysctlbynamePKcPvPmS1_m",                 "sysctlbyname",               (void*)hk_sysctlbyname,               NULL },
-    { "__ZL9my_dlopenPKci",                               "dlopen",                     (void*)hk_dlopen,                     NULL },
-    { "__ZL8my_dlsymPvPKc",                               "dlsym",                      (void*)hk_dlsym,                      NULL },
+    { "__ZL19my_SFileVerifyPieceP3$_0j",                  "SFileVerifyPiece",           (void*)hk_SFileVerifyPiece           },
+    { "__ZL16my_IFSVerifyFileP3$_0",                      "IFSVerifyFile",              (void*)hk_IFSVerifyFile              },
+    { "__ZL23my_IFSReadPieceVerifiedP3$_0jPv",            "IFSReadPieceVerified",       (void*)hk_IFSReadPieceVerified       },
+    { "__ZL25my_SFileReadPieceVerifiedP3$_0jPvPj",        "SFileReadPieceVerified",     (void*)hk_SFileReadPieceVerified     },
+    { "__ZL18my_verify_file_md5PKcS0_",                   "verify_file_md5",            (void*)hk_verify_file_md5            },
+    { "__ZL17my_IFSGetFileSizeP3$_0Py",                   "IFSGetFileSize",             (void*)hk_IFSGetFileSize             },
+    { "__ZL15my_CheckFileMd5PKcPc",                       "CheckFileMd5",               (void*)hk_CheckFileMd5               },
+    { "__ZL19my_GetFileBufferMd5PKvmPc",                  "GetFileBufferMd5",           (void*)hk_GetFileBufferMd5           },
+    { "__ZL13my_RSA_verifyiPKhjS0_jPv",                   "RSA_verify",                 (void*)hk_RSA_verify                 },
+    { "__ZL11my_RSA_signiPKhjPhPjPv",                     "RSA_sign",                   (void*)hk_RSA_sign                   },
+    { "__ZL18my_EVP_PKEY_verifyPvPKhmS1_m",               "EVP_PKEY_verify",            (void*)hk_EVP_PKEY_verify            },
+    { "__ZL23my_EVP_PKEY_verify_initPv",                  "EVP_PKEY_verify_init",       (void*)hk_EVP_PKEY_verify_init       },
+    { "__ZL19my_X509_verify_certPv",                      "X509_verify_cert",           (void*)hk_X509_verify_cert           },
+    { "__ZL25my_X509_check_private_keyPvS_",              "X509_check_private_key",     (void*)hk_X509_check_private_key     },
+    { "__ZL26my_PEM_read_bio_PrivateKeyPvPS_S_S_",        "PEM_read_bio_PrivateKey",    (void*)hk_PEM_read_bio_PrivateKey    },
+    { "__ZL30my_SSL_CTX_use_PrivateKey_filePvPKci",       "SSL_CTX_use_PrivateKey_file",(void*)hk_SSL_CTX_use_PrivateKey_file},
+    { "__ZL28my_SSL_CTX_check_private_keyPv",             "SSL_CTX_check_private_key",  (void*)hk_SSL_CTX_check_private_key  },
+    { "__ZL32my_SSL_CTX_load_verify_locationsPvPKcS1_",   "SSL_CTX_load_verify_locations",(void*)hk_SSL_CTX_load_verify_locations},
+    { "__ZL19my_SFileOpenArchivePKcjjPP3$_0",             "SFileOpenArchive",           (void*)hk_SFileOpenArchive           },
+    { "__ZL16my_SFileOpenFileP3$_0PKcPS0_",               "SFileOpenFile",              (void*)hk_SFileOpenFile              },
+    { "__ZL17my_IFSOpenArchivePKcPP3$_0",                 "IFSOpenArchive",             (void*)hk_IFSOpenArchive             },
+    { "__ZL14my_IFSOpenFileP3$_0PKcPS0_",                 "IFSOpenFile",                (void*)hk_IFSOpenFile                },
+    { "__ZL17my_SFileCloseFileP3$_0",                     "SFileCloseFile",             (void*)hk_SFileCloseFile             },
+    { "__ZL20my_SFileCloseArchiveP3$_0",                  "SFileCloseArchive",          (void*)hk_SFileCloseArchive          },
+    { "__ZL8my_is_jbv",                                   "is_jb",                      (void*)hk_is_jb                      },
+    { "__ZL9my_ROOTEDv",                                  "ROOTED",                     (void*)hk_ROOTED                     },
+    { "__ZL20my_DEBUGGER_ATTACHEDv",                      "DEBUGGER_ATTACHED",          (void*)hk_DEBUGGER_ATTACHED          },
+    { "__ZL21my_isDebuggerAttachedv",                     "isDebuggerAttached",         (void*)hk_isDebuggerAttached         },
+    { "__ZL17my_checkJailbreakv",                         "checkJailbreak",             (void*)hk_checkJailbreak             },
+    { "__ZL11my_hasCydiav",                               "hasCydia",                   (void*)hk_hasCydia                   },
+    { "__ZL17my_isJailbroken_cv",                         "isJailbroken",               (void*)hk_isJailbroken               },
+    { "__ZL19my_amIBeingDebuggedv",                       "amIBeingDebugged",           (void*)hk_amIBeingDebugged           },
+    { "__ZL9my_ptraceiiPci",                              "ptrace",                     (void*)hk_ptrace                     },
+    { "__ZL15my_task_for_pidjiPj",                        "task_for_pid",               (void*)hk_task_for_pid               },
+    { "__ZL20my_vm_read_overwritejmmmPm",                 "vm_read_overwrite",          (void*)hk_vm_read_overwrite          },
+    { "__ZL11my_vm_writejmmj",                            "vm_write",                   (void*)hk_vm_write                   },
+    { "__ZL13my_vm_protectjmmii",                         "vm_protect",                 (void*)hk_vm_protect                 },
+    { "__ZL18my_mach_vm_protectjyyii",                    "mach_vm_protect",            (void*)hk_mach_vm_protect            },
+    { "__ZL9my_sysctlPijPvPmS0_m",                        "sysctl",                     (void*)hk_sysctl                     },
+    { "__ZL15my_sysctlbynamePKcPvPmS1_m",                 "sysctlbyname",               (void*)hk_sysctlbyname               },
+    { "__ZL9my_dlopenPKci",                               "dlopen",                     (void*)hk_dlopen                     },
+    { "__ZL8my_dlsymPvPKc",                               "dlsym",                      (void*)hk_dlsym                      },
 };
 #endif
 
@@ -313,11 +313,9 @@ static int install_c_hooks(void) {
         uintptr_t addr = resolve_sym(e->mangled, e->bare);
         if (!addr) { misses++; continue; }
         
-        void *orig = NULL;
-        // التصحيح: استخدام اسم الدالة الصحيح
-        int rc = litehook_hook_function((void *)addr, e->replacement, &orig);
+        // التصحيح: LiteHook الجديد يتطلب وسيطين فقط (المصدر والهدف)
+        int rc = litehook_hook_function((void *)addr, e->replacement);
         
-        e->orig = orig;
         if (rc == 0) hits++;
         else misses++;
     }
