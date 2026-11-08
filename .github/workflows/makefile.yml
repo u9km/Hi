@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
           
           # تحميل ldid
-          curl -L -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
+          curl -fL -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
           sudo mv /tmp/ldid /usr/local/bin/ldid
           sudo chmod +x /usr/local/bin/ldid
 
@@ -44,8 +44,8 @@ jobs:
           git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/ || true
           
-          # 5. تحميل الـ Linux Toolchain برابط مباشر ومضمون
-          curl -L -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/download/v2.5/linux-toolchain.tar.xz
+          # 5. تحميل الـ Linux Toolchain برابط مباشر ومضمون (الإصدار الأخير)
+          curl -fL -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
           tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
           
           # 6. إضافة المسارات للنظام
