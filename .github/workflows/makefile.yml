@@ -30,23 +30,25 @@ jobs:
 
       - name: Install Theos & Toolchain
         run: |
-          # 1. إنشاء المجلدات أولاً لتجنب مشكلة "No such file or directory"
-          mkdir -p $THEOS
+          # 1. حذف أي مجلد سابق لضمان بيئة نظيفة
+          rm -rf $THEOS
+          
+          # 2. استنساخ Theos أولاً
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          
+          # 3. إنشاء مجلدات الـ SDKs والـ Toolchain بعد الاستنساخ
           mkdir -p $THEOS/sdks
           mkdir -p $THEOS/toolchain
           
-          # 2. استنساخ Theos
-          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
-          
-          # 3. استنساخ الـ SDKs
+          # 4. استنساخ الـ SDKs
           git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/ || true
           
-          # 4. تحميل الـ Linux Toolchain برابط مباشر ومضمون
+          # 5. تحميل الـ Linux Toolchain برابط مباشر ومضمون
           curl -L -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/download/v2.5/linux-toolchain.tar.xz
           tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
           
-          # 5. إضافة المسارات للنظام
+          # 6. إضافة المسارات للنظام
           echo "$THEOS/bin" >> $GITHUB_PATH
           echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
 
