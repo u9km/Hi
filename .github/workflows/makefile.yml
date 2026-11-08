@@ -22,17 +22,33 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
+          
+          # تحميل ldid
           curl -L -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
           sudo mv /tmp/ldid /usr/local/bin/ldid
           sudo chmod +x /usr/local/bin/ldid
 
-      # استخدام إجراء جاهز لتثبيت Theos والأدوات تلقائياً
       - name: Install Theos & Toolchain
-        uses: Randomblock1/theos-action@v1
-        with:
-          theos-dir: 'theos'
-          theos-src: 'https://github.com/theos/theos'
-          theos-sdks: 'https://github.com/theos/sdks'
+        run: |
+          # 1. إنشاء المجلدات أولاً لتجنب مشكلة "No such file or directory"
+          mkdir -p $THEOS
+          mkdir -p $THEOS/sdks
+          mkdir -p $THEOS/toolchain
+          
+          # 2. استنساخ Theos
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          
+          # 3. استنساخ الـ SDKs
+          git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
+          cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/ || true
+          
+          # 4. تحميل الـ Linux Toolchain برابط مباشر ومضمون
+          curl -L -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/download/v2.5/linux-toolchain.tar.xz
+          tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
+          
+          # 5. إضافة المسارات للنظام
+          echo "$THEOS/bin" >> $GITHUB_PATH
+          echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
 
       - name: Build LiteHook
         run: |
