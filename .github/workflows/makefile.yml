@@ -21,29 +21,25 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y make git curl wget xz-utils clang libssl-dev libplist-dev libxml2-dev zip
+          sudo apt-get install -y make git curl clang libssl-dev libplist-dev libxml2-dev zip
           
-          # Download ldid for Linux
-          wget -q https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
-          sudo mv ldid_linux_x86_64 /usr/local/bin/ldid
+          # تحميل ldid
+          curl -L -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
+          sudo mv /tmp/ldid /usr/local/bin/ldid
           sudo chmod +x /usr/local/bin/ldid
 
       - name: Install Theos & Toolchain
         run: |
           git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
           
-          # Clone SDKs
           git clone --depth 1 https://github.com/theos/sdks /tmp/sdks
           mkdir -p $THEOS/sdks
           cp -r /tmp/sdks/iPhoneOS*.sdk $THEOS/sdks/
           
-          # Download Linux Toolchain (v2.5 is stable)
           mkdir -p $THEOS/toolchain
-          wget -q https://github.com/theos/toolchain/releases/download/v2.5/linux-toolchain.tar.xz
-          tar -xf linux-toolchain.tar.xz -C $THEOS/toolchain
-          rm linux-toolchain.tar.xz
+          curl -L -o /tmp/linux-toolchain.tar.xz https://github.com/theos/toolchain/releases/latest/download/linux-toolchain.tar.xz
+          tar -xf /tmp/linux-toolchain.tar.xz -C $THEOS/toolchain
           
-          # Add to PATH for subsequent steps
           echo "$THEOS/bin" >> $GITHUB_PATH
           echo "$THEOS/toolchain/linux/iphone/bin" >> $GITHUB_PATH
 
